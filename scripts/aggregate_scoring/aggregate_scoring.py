@@ -9,6 +9,7 @@ import math
 import osmnx as ox
 import networkx as nx
 import numpy as np
+from shapely.geometry import Point
 
 ######################################################################################################################################
 
@@ -30,15 +31,21 @@ class ScoringCriterion:
 
     # --- DesirableUndesirableActivities ---
     "rural_gdf_unary_union": gpd.read_file("../../data/raw/shapefiles/USDA_Rural_Housing_by_Tract_7054655361891465054/USDA_Rural_Housing_by_Tract.shp").to_crs("EPSG:4326").unary_union,
-    "desirable_csv": pd.read_csv("../../data/processed/scoring_indicators/desirable_activities_google_places_v3.csv"),
-    "grocery_csv": pd.read_csv("../../data/processed/scoring_indicators/desirable_activities_google_places_v3.csv"),
-    "usda_csv": pd.read_csv("../../data/raw/scoring_indicators/food_access_research_atlas.csv", dtype={'CensusTract': str}),
+    "desirable_csv": pd.read_csv("../../data/processed/scoring_indicators/desirable_undesirable_activities/desirable_activities_google_places_v3.csv"),
+    "grocery_csv": pd.read_csv("../../data/processed/scoring_indicators/desirable_undesirable_activities/desirable_activities_google_places_v3.csv"),
+    "usda_csv": pd.read_csv("../../data/raw/scoring_indicators/desirable_undesirable_activities/usda/food_access_research_atlas.csv", dtype={'CensusTract': str}),
     "tract_shapefile": gpd.read_file("../../data/raw/shapefiles/tl_2024_13_tract/tl_2024_13_tract.shp"),
-    "undesirable_csv": pd.read_csv("../../data/processed/scoring_indicators/undesirable_hsi_tri_cdr_rcra_frs_google_places.csv"),
+    "undesirable_csv": pd.read_csv("../../data/processed/scoring_indicators/desirable_undesirable_activities/undesirable_hsi_tri_cdr_rcra_frs_google_places.csv"),
 
     # --- QualityEducation ---
     "school_df": pd.read_csv("../../data/processed/scoring_indicators/quality_education/Option_C_Scores_Eligibility_with_BTO.csv"),
-    "combined_gdf": gpd.read_file("../../data/processed/scoring_indicators/quality_education/merged1.geojson", crs="EPSG:4326"),
+    "school_boundary_gdfs": [
+    gpd.read_file("../../data/raw/shapefiles/quality_education/Administrative.geojson").to_crs("EPSG:4326"),
+    gpd.read_file("../../data/raw/shapefiles/quality_education/APSBoundaries.json").to_crs("EPSG:4326"),
+    gpd.read_file("../../data/raw/shapefiles/quality_education/DKE.json").to_crs("EPSG:4326"),
+    gpd.read_file("../../data/raw/shapefiles/quality_education/DKM.json").to_crs("EPSG:4326"),
+    gpd.read_file("../../data/raw/shapefiles/quality_education/DKBHS.json").to_crs("EPSG:4326")
+    ],   
     "state_avg_by_year": {
         "elementary": {
             2018: 77.8,
@@ -55,7 +62,7 @@ class ScoringCriterion:
     },
 
     # --- StableCommunities ---
-    "indicators_df": pd.read_csv("../../data/processed/scoring_indicators/stable_communities_2024_processed_v3.csv"),
+    "indicators_df": pd.read_csv("../../data/processed/scoring_indicators/stable_communities/stable_communities_2024_processed_v3.csv"),
     "tracts_shp": gpd.read_file("../../data/raw/shapefiles/tl_2024_13_tract/tl_2024_13_tract.shp").to_crs("EPSG:4326"),
     
     # --- HousingNeedsCharacteristics ---
@@ -314,76 +321,104 @@ class QualityEducation(ScoringCriterion):
         super().__init__(latitude, longitude, **kwargs)
         self.school_df = kwargs.get("school_df")
         self.state_avg_by_year = kwargs.get("state_avg_by_year")
-        self.combined_gdf = kwargs.get("combined_gdf")
+        self.school_boundary_gdfs = kwargs.get("school_boundary_gdfs", [])
+        self.point = Point(self.longitude, self.latitude)
 
-        point = Point(self.longitude, self.latitude)  # Note: (lon, lat) order for Point
-        self.matching_area = self.combined_gdf[self.combined_gdf.contains(point)]
+    def get_school_names(self):
+        elementary = []
+        middle = []
+        high = []
+
+        for i, gdf in enumerate(self.school_boundary_gdfs):
+            if gdf is None or self.point is None:
+                continue
+            if gdf.crs != "EPSG:4326":
+                gdf = gdf.to_crs("EPSG:4326")
+            matched = gdf[gdf.contains(self.point)]
+            if matched.empty:
+                continue
+
+            if i == 0:
+                elementary.extend(matched["ELEMENTARY"].dropna().tolist())
+                middle.extend(matched["MIDDLE"].dropna().tolist())
+                high.extend(matched["HIGH"].dropna().tolist())
+            elif i == 1:
+                elementary.extend(matched["Elementary"].dropna().tolist())
+                middle.extend(matched["Middle"].dropna().tolist())
+                high.extend(matched["High"].dropna().tolist())
+            elif i == 2:
+                elementary.extend(matched["DDP_ES_Nam"].dropna().tolist())
+            elif i == 3:
+                middle.extend(matched["DDP_MS_Name"].dropna().tolist())
+            elif i == 4:
+                high.extend(matched["DDP_HS_Nam"].dropna().tolist())
+
+        return elementary, middle, high
 
     def preprocess_school_name(self, name):
         name = re.sub(r'[^\w\s]', '', str(name).lower())
-        name = re.sub(r'\b\w\s?\.?\s?', '', name)
-        suffixes = ["elementary", "middle", "high", "school", "academy", "jr", "sr", "dr"]
+        suffixes = ["elementary", "middle", "high", "school", "academy", "jr", "sr", "dr", "es", "ms", "hs"]
         tokens = [token for token in name.split() if token not in suffixes]
-        return " ".join(tokens).strip()
+        cleaned = " ".join(tokens).strip()
+        return cleaned
 
-    def find_best_match(self, school_name, school_type):
+    def find_best_match(self, school_names, school_type):
+        if not school_names:
+            return None
+
         grade_cluster = {"elementary": "E", "middle": "M", "high": "H"}.get(school_type.lower())
         filtered_df = self.school_df[self.school_df["Grade Cluster"] == grade_cluster]
         if filtered_df.empty:
             return None
 
-        cleaned_input = self.preprocess_school_name(school_name)
-        cleaned_names = filtered_df["School Name"].apply(self.preprocess_school_name).tolist()
-        best_match, score = process.extractOne(cleaned_input, cleaned_names, scorer=fuzz.token_set_ratio)
+        best_score = 0
+        best_match_row = None
 
-        if score > 80:
-            return filtered_df[filtered_df["School Name"].apply(self.preprocess_school_name) == best_match].iloc[0]
-        return None
+        for name in school_names:
+            cleaned_input = self.preprocess_school_name(name)
+            cleaned_map = filtered_df["School Name"].apply(self.preprocess_school_name)
+            cleaned_names = cleaned_map.tolist()
+            match, score = process.extractOne(cleaned_input, cleaned_names, scorer=fuzz.token_set_ratio)
+            if score > best_score and score > 80:
+                best_score = score
+                match_index = cleaned_map[cleaned_map == match].index[0]
+                best_match_row = filtered_df.loc[match_index]
+
+        return best_match_row
 
     def qualifies_by_A(self, school):
         grade_cluster = school.get("Grade Cluster", "").strip().upper()
         cluster_key = {"E": "elementary", "M": "middle", "H": "high"}.get(grade_cluster)
-        if not cluster_key:
+        if not cluster_key or cluster_key not in self.state_avg_by_year:
             return False
-
-        if cluster_key not in self.state_avg_by_year:
-            return False
-
-        years = [y for y in [2018, 2019] if y in self.state_avg_by_year[cluster_key] and y in school.index and not pd.isna(school[y])]
+        years = [y for y in [2018, 2019] if y in school.index and not pd.isna(school[y])]
         if not years:
             return False
-
         school_avg = school[years].mean()
         state_avg = sum(self.state_avg_by_year[cluster_key][y] for y in years) / len(years)
         return school_avg > state_avg
 
     def qualifies_by_B(self, school):
-        return school.get('Beating the Odds', False)
+        return school.get("2019 BTO Designation", "").lower() == "beating the odds"
 
     def qualifies_by_C(self, school):
         try:
             return (
-                float(school['YoY Average']) > 0 and
-                float(school['Average score']) >= float(school['Applicable 25th Percentile'])
+                float(school["YoY Average"]) > 0 and
+                float(school["Average score"]) >= float(school["Applicable 25th Percentile"])
             )
         except (ValueError, TypeError, KeyError):
             return False
 
     def grade_cluster_to_grades(self, cluster):
-        mapping = {
+        return {
             'E': list(range(0, 6)),
             'M': list(range(6, 9)),
             'H': list(range(9, 13)),
-        }
-        return mapping.get(str(cluster).strip().upper(), [])
+        }.get(str(cluster).strip().upper(), [])
 
     def calculate_score(self):
-        if self.matching_area is None or self.matching_area.empty:
-            return 0
-
-        elementary = self.matching_area.iloc[0].get("elementary")
-        middle = self.matching_area.iloc[0].get("middle")
-        high = self.matching_area.iloc[0].get("high")
+        elementary, middle, high = self.get_school_names()
 
         best_elementary = self.find_best_match(elementary, "elementary")
         best_middle = self.find_best_match(middle, "middle")
@@ -395,13 +430,13 @@ class QualityEducation(ScoringCriterion):
         for school in [best_elementary, best_middle, best_high]:
             if school is None or not isinstance(school, pd.Series):
                 continue
-            if self.qualifies_by_A(school) or self.qualifies_by_B(school) or self.qualifies_by_C(school):
-                grades = self.grade_cluster_to_grades(school.get('Grade Cluster', ''))
+            if (self.qualifies_by_A(school) or
+                self.qualifies_by_B(school) or
+                self.qualifies_by_C(school)):
+                grades = self.grade_cluster_to_grades(school.get("Grade Cluster", ""))
                 total_qualified_grades.update(grades)
-                tenancy_type = school.get('tenancy_type', tenancy_type)
 
         grade_count = len(total_qualified_grades)
-
         if grade_count == 0:
             return 0
         elif grade_count == 3:
@@ -409,7 +444,7 @@ class QualityEducation(ScoringCriterion):
         elif grade_count == 7:
             return 1.5
         elif grade_count == 13:
-            return 3 if tenancy_type.lower() == 'family' else 2
+            return 3 if tenancy_type.lower() == "family" else 2
         elif 3 < grade_count < 7:
             return 1
         elif 7 < grade_count < 13:
@@ -445,7 +480,12 @@ class StableCommunities(ScoringCriterion):
 
         return tract_dict
 
-    def calculate_score(self):
+    def calculate_indicators_score(self):
+        """
+        Calculate scores based on indicators being above median values.
+        Computes both actual tract score and nearby tract score.
+        """
+        # These are the columns that reflect whether an indicator is above the pool-specific 50th percentile
         indicators = [
             "above_median_Environmental Health Index",
             "above_median_Transit Access Index",
@@ -454,41 +494,75 @@ class StableCommunities(ScoringCriterion):
             "above_median_Jobs Proximity Index"
         ]
 
-        actual_tract = self.tract_dict.get("actual")
         self.indicators_df["2020 Census Tract"] = self.indicators_df["2020 Census Tract"].astype(str)
+        actual_tract = self.tract_dict.get("actual")
 
+        # Actual tract flags
+        actual_flags = pd.Series([0] * len(indicators), index=indicators)
         if actual_tract and actual_tract in self.indicators_df["2020 Census Tract"].values:
-            actual_data = self.indicators_df[self.indicators_df["2020 Census Tract"] == actual_tract]
-            actual_count = actual_data[indicators].sum(axis=1).iloc[0]
-        else:
-            actual_count = 0
+            actual_row = self.indicators_df[self.indicators_df["2020 Census Tract"] == actual_tract]
+            actual_flags = actual_row[indicators].iloc[0]
+        actual_count = int(actual_flags.sum())
 
-        near_counts = []
+        # Nearby tract flags (only nearby, excluding actual)
+        nearby_flags = pd.Series([0] * len(indicators), index=indicators)
         for key, tract in self.tract_dict.items():
             if key == "actual":
                 continue
             if tract in self.indicators_df["2020 Census Tract"].values:
-                near_data = self.indicators_df[self.indicators_df["2020 Census Tract"] == tract]
-                near_counts.append(near_data[indicators].sum(axis=1).iloc[0])
+                row = self.indicators_df[self.indicators_df["2020 Census Tract"] == tract]
+                flags = row[indicators].iloc[0]
+                nearby_flags = nearby_flags.combine(flags, func=max)
+        nearby_count = int(nearby_flags.sum())
 
-        near_max = max(near_counts) if near_counts else 0
+        # Combined flags (actual + all nearby) 
+        combined_flags = actual_flags.combine(nearby_flags, func=max)
+        combined_count = int(combined_flags.sum())
 
+        # Actual-only scoring (must come 100% from actual tract)
         if actual_count >= 4:
-            score = 10
+            actual_only_score = 10
         elif actual_count == 3:
-            score = 8
+            actual_only_score = 8
         elif actual_count == 2:
-            score = 6
-        elif near_max >= 4:
-            score = 9
-        elif near_max == 3:
-            score = 7
-        elif near_max == 2:
-            score = 5
+            actual_only_score = 6
         else:
-            score = 0
+            actual_only_score = 0
 
-        return score
+        # Nearby scoring (uses combined indicators) 
+        if nearby_count > 0:
+            if combined_count >= 4:
+                nearby_score = 9
+            elif combined_count == 3:
+                nearby_score = 7
+            elif combined_count == 2:
+                nearby_score = 5
+            else:
+                nearby_score = 0
+        else:
+            nearby_score = 0 
+
+        return {
+            "actual_tract": actual_tract,
+            "actual_count": actual_count,
+            "nearby_count": nearby_count,
+            "combined_count": combined_count,
+            "actual_only_score": actual_only_score,
+            "nearby_score": nearby_score
+        }
+
+    def calculate_score(self):
+        """
+        Calculate the final score as the maximum of actual tract score and nearby tract score.
+        """
+        score_info = self.calculate_indicators_score()
+        
+        # Get the maximum of the two scores
+        actual_score = score_info["actual_only_score"]
+        nearby_score = score_info["nearby_score"]
+        final_score = max(actual_score, nearby_score)
+        
+        return final_score
 
 ###################################################################################################################################
 
