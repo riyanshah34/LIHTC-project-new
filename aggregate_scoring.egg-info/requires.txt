@@ -1,0 +1,9 @@
+pandas
+geopandas
+shapely
+numpy
+osmnx
+networkx
+thefuzz
+requests
+geopy

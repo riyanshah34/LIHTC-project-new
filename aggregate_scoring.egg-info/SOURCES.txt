@@ -1,0 +1,10 @@
+README.md
+setup.py
+aggregate_scoring.egg-info/PKG-INFO
+aggregate_scoring.egg-info/SOURCES.txt
+aggregate_scoring.egg-info/dependency_links.txt
+aggregate_scoring.egg-info/requires.txt
+aggregate_scoring.egg-info/top_level.txt
+scripts/aggregate_scoring/__init__.py
+scripts/aggregate_scoring/aggregate_scoring.py
+scripts/aggregate_scoring/grid_scoring_multiproc.py
