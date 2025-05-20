@@ -38,7 +38,7 @@ class ScoringCriterion:
     "undesirable_csv": pd.read_csv("../../data/processed/scoring_indicators/desirable_undesirable_activities/undesirable_hsi_tri_cdr_rcra_frs_google_places.csv"),
 
     # --- QualityEducation ---
-    "school_df": pd.read_csv("../../data/processed/scoring_indicators/quality_education/Option_C_Scores_Eligibility_with_BTO.csv"),
+    "school_df": pd.read_csv("../../data/processed/scoring_indicators/quality_education_areas/Option_C_Scores_Eligibility_with_BTO.csv"),
     "school_boundary_gdfs": [
     gpd.read_file("../../data/raw/shapefiles/quality_education/Administrative.geojson").to_crs("EPSG:4326"),
     gpd.read_file("../../data/raw/shapefiles/quality_education/APSBoundaries.json").to_crs("EPSG:4326"),
@@ -66,7 +66,7 @@ class ScoringCriterion:
     "tracts_shp": gpd.read_file("../../data/raw/shapefiles/tl_2024_13_tract/tl_2024_13_tract.shp").to_crs("EPSG:4326"),
     
     # --- HousingNeedsCharacteristics ---
-    "census_tract_data": pd.read_csv("../../data/processed/scoring_indicators/housing_needs/merged_housing_data.csv"),
+    "census_tract_data": pd.read_csv("../../data/processed/scoring_indicators/housing_needs_characteristics/merged_housing_data.csv"),
     "tracts_gdf": gpd.read_file("../../data/raw/shapefiles/HousingNeeds/tl_2020_13_tract/tl_2020_13_tract.shp").to_crs("EPSG:4326"),
     #"revitalization_score": 4,
     "in_qct": False  # Required for housing need eligibility
