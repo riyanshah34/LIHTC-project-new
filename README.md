@@ -35,9 +35,9 @@ developments are likely to score
 
 ---
 
-## Repository Layout
+### Repository Layout
 ```text
-├── aggregate_scoring/         # Core scoring logic and simulation tools
+├── aggregate_scoring/      # Core scoring logic and simulation tools
 │   ├── aggregate_scoring.py                 # Script to combine all category scores and create final scoring dataset for mapping
 │   ├── site_level_aggregate_scoring.ipynb   # For site-level scoring, just enter long/lat points of interest and run the script
 │   └── grid_scoring_loop.ipynb              # Used to run the scoring function for each grid cell in the metro Atlanta area (for mapping)
@@ -50,13 +50,37 @@ developments are likely to score
 ├── scripts/                # Python modules & notebooks for each QAP category
 │   ├── community_transportation_options/ # Scripts for preprocessing and processing needed data, and creating score function for Community Transportation Options
 │   ├── desirable_undesirable_activities/ # Scripts for collecting, preprocessing, and processing needed data, and creating score function for Desirable/Undesirable Activities
-│   ├── housing_needs_characteristics/ # Scripts for preprocessing and processing needed data, and creating score function for Housing Needs Characteristics
-│   ├── quality_education_area/ # Scripts for preprocessing and processing needed data, and creating score function for Quality Education Area
-│   ├── stable_communities/ # Scripts for preprocessing and processing needed data, and creating score function for Stable Communities
-│   └── maps/               # Script to make folium maps
+│   ├── housing_needs_characteristics/    # Scripts for preprocessing and processing needed data, and creating score function for Housing Needs Characteristics
+│   ├── quality_education_area/           # Scripts for preprocessing and processing needed data, and creating score function for Quality Education Area
+│   ├── stable_communities/               # Scripts for preprocessing and processing needed data, and creating score function for Stable Communities
+│   └── maps/                             # Script to make folium maps
 |
 ├── maps/                   # HTML heatmaps exported 
 ├── requirements.txt        # Exact package versions
 └── README.md               # You are here
+```
 ---
 
+### Data Sources
+No proprietary data was used in this project. This project integrates publicly available datasets and APIs to compute location-based scores defined in Georgia’s 2024 QAP. Key data sources by category:
+- **Desirable / Undesirable Activities**
+  - Google Places API (e.g., parks, clinics, auto shops)
+  - U.S. EPA: Recovery Act Information System, Toxics Release Inventory (TRI), Chemical Data Reporting (CDR)
+  - Georgia EPD: Hazardous Site Inventory
+  - USDA: Food Access Research Atlas
+- **Community Transportation Options**
+  - Google Places API (Transit stops & hubs)
+  - OpenStreetMap (Network walking distance)
+- **Quality Education Areas**
+  - Georgia Department of Education (CCRPI, Beating the Odds)
+  - Governor’s Office of Student Achievement
+  - Atlanta Public Schools Office of Student Assignment
+  - Dekalb County ArcGIS Portal
+- **Stable Communities**
+  - U.S. Census Bureau: American Community Survey (Poverty Rate, Median Income)
+  - Georgia Housing Needs Assessment (Environmental Health Index, Transit Access, Jobs Proximity)
+- **Applicant Location Data**
+  - Georgia Department of Community Affairs (LIHTC applications, 2022–2024)
+
+### Contact 
+Questions, suggestions, or contributions welcome via GitHub Issues or Pull Requests.
