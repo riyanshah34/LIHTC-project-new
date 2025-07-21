@@ -418,38 +418,46 @@ class QualityEducation(ScoringCriterion):
         }.get(str(cluster).strip().upper(), [])
 
     def calculate_score(self):
-        elementary, middle, high = self.get_school_names()
+        try:
+            metro_gdf = gpd.read_file("data/maps/quality_education_areas/education_score_metro_atl.geojson")
+            metro_gdf = metro_gdf.to_crs("EPSG:4326")
+            point = Point(self.longitude, self.latitude)
+            matched = metro_gdf[metro_gdf.contains(point)]
+            if not matched.empty:
+                return float(matched.iloc[0]["score"])
+        except Exception as e:
+            elementary, middle, high = self.get_school_names()
 
-        best_elementary = self.find_best_match(elementary, "elementary")
-        best_middle = self.find_best_match(middle, "middle")
-        best_high = self.find_best_match(high, "high")
+            best_elementary = self.find_best_match(elementary, "elementary")
+            best_middle = self.find_best_match(middle, "middle")
+            best_high = self.find_best_match(high, "high")
 
-        total_qualified_grades = set()
-        tenancy_type = "family"
+            total_qualified_grades = set()
+            tenancy_type = "family"
 
-        for school in [best_elementary, best_middle, best_high]:
-            if school is None or not isinstance(school, pd.Series):
-                continue
-            if (self.qualifies_by_A(school) or
-                self.qualifies_by_B(school) or
-                self.qualifies_by_C(school)):
-                grades = self.grade_cluster_to_grades(school.get("Grade Cluster", ""))
-                total_qualified_grades.update(grades)
+            for school in [best_elementary, best_middle, best_high]:
+                if school is None or not isinstance(school, pd.Series):
+                    continue
+                if (self.qualifies_by_A(school) or
+                    self.qualifies_by_B(school) or
+                    self.qualifies_by_C(school)):
+                    grades = self.grade_cluster_to_grades(school.get("Grade Cluster", ""))
+                    total_qualified_grades.update(grades)
 
-        grade_count = len(total_qualified_grades)
-        if grade_count == 0:
+            grade_count = len(total_qualified_grades)
+            if grade_count == 0:
+                return 0
+            elif grade_count == 3:
+                return 1
+            elif grade_count == 7:
+                return 1.5
+            elif grade_count == 13:
+                return 3 if tenancy_type.lower() == "family" else 2
+            elif 3 < grade_count < 7:
+                return 1
+            elif 7 < grade_count < 13:
+                return 1.5
             return 0
-        elif grade_count == 3:
-            return 1
-        elif grade_count == 7:
-            return 1.5
-        elif grade_count == 13:
-            return 3 if tenancy_type.lower() == "family" else 2
-        elif 3 < grade_count < 7:
-            return 1
-        elif 7 < grade_count < 13:
-            return 1.5
-        return 0
 
 ####################################################################################################################################
 
