@@ -399,7 +399,7 @@ class QualityEducation(ScoringCriterion):
         return school_avg > state_avg
 
     def qualifies_by_B(self, school):
-        return school.get("2019 BTO Designation", "").lower() == "beating the odds"
+        return school.get("2019 BTO Designation", "") == "Beating the Odds"
 
     def qualifies_by_C(self, school):
         try:
